@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fortune Teller</title>
+    <style>
+        /* Basic styling for layout and appearance */
+        
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            height: 100vh;
+            background: url(download.jpg);
+            background-attachment: fixed;
+  
+            background-size: cover;
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        h1 {
+            color: #ec7a58;
+        }
+        #fortune {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px solid #333;
+            border-radius: 10px;
+            background-color: #d53737;
+            width: 300px;
+            font-size: 18px;
+        }
+        #video {
+            border: 2px solid #333;
+            width: 320px; /* Width of the video element */
+            height: 240px; /* Height of the video element */
+            margin-bottom: 20px;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+    </style>
+    <!-- Load TensorFlow.js and Handpose model for hand detection -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
+</head>
+<body>
+    <!-- Page title -->
+    <h1>SHOW YOUR HAND PALM TO VIEW YOUR FORTUNE</h1>
+    <!-- Video element for live camera feed -->
+    <video id="video" autoplay></video>
+    <!-- Fortune display area -->
+    <div id="fortune">Your fortune will appear here!</div>
+    <!-- Canvas overlay for drawing the hand landmarks -->
+    <canvas id="overlay"></canvas>
+
+    <script>
+        // Array of random fortunes
+        const fortunes = [
+            "You will have a great day!",
+            "Adventure awaits you.",
+            "A new opportunity is coming your way.",
+            "You will meet someone special soon.",
+            "Your hard work will pay off.",
+            "A surprise is in store for you.",
+            "Believe in yourself, and good things will happen.",
+            "Expect good news in the near future.",
+            "Something you lost will soon be found.",
+            "You will travel to a place you've always wanted to visit."
+        ];
+
+        // Flag to track palm visibility
+        let palmVisible = true;
+
+        // Sets up the camera for video feed
+        async function setupCamera() {
+            const video = document.getElementById('video');
+            try {
+                // Request video stream from the user’s camera
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream; // Set the video source to the camera stream
+            } catch (err) {
+                console.error("Error accessing the camera: ", err);
+                alert("Unable to access the camera. Please check your permissions.");
+            }
+        }
+
+        // Loads the handpose model for detecting hand landmarks
+        async function loadHandposeModel() {
+            return await handpose.load();
+        }
+
+        // Runs hand detection on the video feed and triggers fortune display if palm is shown
+        async function detectHand(model) {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('overlay');
+            const ctx = canvas.getContext('2d');
+            canvas.width = video.width;
+            canvas.height = video.height;
+
+            // Set an interval to continuously detect hands in the video feed
+            setInterval(async () => {
+                const predictions = await model.estimateHands(video);
+                ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear previous drawings
+
+                if (predictions.length > 0) {
+                    const hand = predictions[0];
+                    const landmarks = hand.landmarks;
+
+                    // Draw palm outline on detected landmarks
+                    drawPalmOutline(ctx, landmarks);
+
+                    // Check if the palm is visible
+                    if (isPalmShown(landmarks)) {
+                        if (!palmVisible) {  // Check if the palm was previously not visible
+                            palmVisible = true;
+                            displayFortune();  // Show a new fortune
+                        }
+                    } else {
+                        palmVisible = false;  // Reset palm visibility when not detected
+                    }
+                } else {
+                    palmVisible = false;  // Reset if no hand is detected
+                }
+            }, 100);
+        }
+
+        // Draws an outline of the palm on the canvas based on detected landmarks
+        function drawPalmOutline(ctx, landmarks) {
+            ctx.beginPath();
+            ctx.moveTo(landmarks[0][0], landmarks[0][1]); // Start at the wrist landmark
+
+            // Draw lines connecting wrist and fingertips to form the outline
+            [4, 8, 12, 16, 20, 0].forEach(i => {
+                ctx.lineTo(landmarks[i][0], landmarks[i][1]);
+            });
+
+            ctx.closePath(); // Complete the shape
+            ctx.strokeStyle = "blue";
+            ctx.lineWidth = 3;
+            ctx.stroke();
+        }
+
+        // Determines if the palm is shown by measuring landmark distances
+        function isPalmShown(landmarks) {
+            const wrist = landmarks[0];
+            const thumbTip = landmarks[4];
+            const indexTip = landmarks[8];
+
+            // Calculate distances from wrist to thumb and index fingertips
+            const thumbDistance = Math.hypot(thumbTip[0] - wrist[0], thumbTip[1] - wrist[1]);
+            const indexDistance = Math.hypot(indexTip[0] - wrist[0], indexTip[1] - wrist[1]);
+
+            // Check if palm is open by setting thresholds for distances
+            return thumbDistance < 100 && indexDistance < 100;
+        }
+
+        // Randomly selects and displays a fortune from the array
+        function displayFortune() {
+            const randomIndex = Math.floor(Math.random() * fortunes.length);
+            const fortune = fortunes[randomIndex];
+            document.getElementById('fortune').textContent = fortune;
+        }
+
+        // Main function to set up camera, load model, and start hand detection
+        async function main() {
+            await setupCamera(); // Initialize camera
+            const model = await loadHandposeModel(); // Load the handpose model
+            detectHand(model); // Start detecting hands
+        }
+
+        // Execute the main function to start the app
+        main();
+    </script>
+</body>
+</html>
